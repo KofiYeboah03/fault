@@ -49,7 +49,7 @@
         
         // Authentication codes
         const AUTH_CODES = {
-          'DTO1122': 'officer',  // District Officer code
+          'DTO1122': 'officer',
           'OFORI4422': 'Ofori',
           'DANIEL9898': 'Daniel',
           'DAVID4545': 'David'
@@ -307,7 +307,7 @@
             const reported = new Date(fault.reported_time);
             const arrived = new Date(fault.arrived_time);
             const minutes = Math.round((arrived - reported) / (1000 * 60));
-            return minutes >= 0 ? minutes : 0; // Prevent negative values
+            return minutes >= 0 ? minutes : 0;
           };
 
           const getResolutionTime = (fault) => {
@@ -315,7 +315,7 @@
             const arrived = new Date(fault.arrived_time);
             const resolved = new Date(fault.resolved_time);
             const minutes = Math.round((resolved - arrived) / (1000 * 60));
-            return minutes >= 0 ? minutes : 0; // Prevent negative values
+            return minutes >= 0 ? minutes : 0;
           };
 
           const generateStats = () => {
@@ -477,49 +477,51 @@
                       >
                         Access System
                       </button>
+                    </div>
+                  </div>
 
-                      <div className="bg-gray-50 rounded-lg p-6">
-                        <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                          <Calendar />
-                          Recent Faults
-                        </h2>
-                        <div className="space-y-3">
-                          {faults
-                            .slice(0, 10)
-                            .map((fault) => (
-                              <div key={fault.id} className="bg-white rounded-lg p-4 border-l-4 border-blue-500">
-                                <div className="flex flex-wrap justify-between items-start gap-2 mb-2">
-                                  <div>
-                                    <span className="font-semibold text-gray-800">
-                                      Meter: {fault.meter_number}
-                                    </span>
-                                    <span className="text-gray-600 ml-2">• {fault.location}</span>
-                                  </div>
-                                  <span
-                                    className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                                      fault.status === 'resolved'
-                                        ? 'bg-green-100 text-green-700'
-                                        : fault.status === 'in-progress'
-                                        ? 'bg-yellow-100 text-yellow-700'
-                                        : 'bg-gray-100 text-gray-700'
-                                    }`}
-                                  >
-                                    {fault.status === 'resolved' ? 'Resolved' : fault.status === 'in-progress' ? 'In Progress' : 'Assigned'}
+                  {faults.length > 0 && (
+                    <div className="bg-white rounded-lg shadow-xl p-6 mt-6">
+                      <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <Calendar />
+                        Recent Faults
+                      </h2>
+                      <div className="space-y-3">
+                        {faults
+                          .slice(0, 10)
+                          .map((fault) => (
+                            <div key={fault.id} className="bg-gray-50 rounded-lg p-4 border-l-4 border-blue-500">
+                              <div className="flex flex-wrap justify-between items-start gap-2 mb-2">
+                                <div>
+                                  <span className="font-semibold text-gray-800">
+                                    Meter: {fault.meter_number}
                                   </span>
+                                  <span className="text-gray-600 ml-2">• {fault.location}</span>
                                 </div>
-                                <div className="grid grid-cols-2 gap-2 text-sm text-gray-600 mb-2">
-                                  <div>
-                                    <span className="font-semibold">Team Member:</span> {fault.team_member}
-                                  </div>
-                                  <div>
-                                    <span className="font-semibold">Source:</span> {fault.source}
-                                  </div>
+                                <span
+                                  className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                                    fault.status === 'resolved'
+                                      ? 'bg-green-100 text-green-700'
+                                      : fault.status === 'in-progress'
+                                      ? 'bg-yellow-100 text-yellow-700'
+                                      : 'bg-gray-100 text-gray-700'
+                                  }`}
+                                >
+                                  {fault.status === 'resolved' ? 'Resolved' : fault.status === 'in-progress' ? 'In Progress' : 'Assigned'}
+                                </span>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2 text-sm text-gray-600">
+                                <div>
+                                  <span className="font-semibold">Team:</span> {fault.team_member}
+                                </div>
+                                <div>
+                                  <span className="font-semibold">Source:</span> {fault.source}
                                 </div>
                               </div>
-                            ))}
-                        </div>
+                            </div>
+                          ))}
                       </div>
-                    </>
+                    </div>
                   )}
                 </div>
               </div>
@@ -1115,42 +1117,6 @@
                           </div>
                         );
                       })}
-                    </div>
-                  </div>
-
-                  <div className="bg-gray-50 rounded-lg p-6 mb-6">
-                    <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                      <Users />
-                      Team Performance Summary
-                    </h2>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      {Object.entries(stats.teamStats).map(([member, data]) => (
-                        <div key={member} className="bg-white rounded-lg p-4">
-                          <h3 className="font-bold text-lg mb-3">{member}</h3>
-                          <div className="space-y-2">
-                            <div className="flex justify-between">
-                              <span className="text-gray-600">Total Faults</span>
-                              <span className="font-semibold">{data.total}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-600">Resolved</span>
-                              <span className="font-semibold text-green-600">{data.resolved}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-600">Lights Restored</span>
-                              <span className="font-semibold text-blue-600">{data.lightsRestored}</span>
-                            </div>
-                            <div className="mt-3 pt-3 border-t">
-                              <div className="text-center">
-                                <p className="text-sm text-gray-600">Success Rate</p>
-                                <p className="text-2xl font-bold text-purple-600">
-                                  {data.resolved > 0 ? Math.round((data.lightsRestored / data.resolved) * 100) : 0}%
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
                     </div>
                   </div>
                 </div>
