@@ -321,10 +321,70 @@
             return minutes >= 0 ? minutes : 0;
           };
 
-          const generateStats = () => {
-            const resolvedFaults = faults.filter(f => f.status === 'resolved');
+          const getDateRange = (type) => {
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
             
-            const responseTimes = faults.map(getResponseTime).filter(t => t !== null);
+            switch(type) {
+              case 'today':
+                return { start: today, end: new Date(today.getTime() + 24 * 60 * 60 * 1000) };
+              case 'yesterday':
+                const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+                return { start: yesterday, end: today };
+              case 'this-week':
+                const weekStart = new Date(today);
+                weekStart.setDate(today.getDate() - today.getDay());
+                return { start: weekStart, end: now };
+              case 'last-week':
+                const lastWeekEnd = new Date(today);
+                lastWeekEnd.setDate(today.getDate() - today.getDay());
+                const lastWeekStart = new Date(lastWeekEnd);
+                lastWeekStart.setDate(lastWeekEnd.getDate() - 7);
+                return { start: lastWeekStart, end: lastWeekEnd };
+              case 'this-month':
+                const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+                return { start: monthStart, end: now };
+              case 'last-month':
+                const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 1);
+                return { start: lastMonthStart, end: lastMonthEnd };
+              case 'this-quarter':
+                const quarter = Math.floor(now.getMonth() / 3);
+                const quarterStart = new Date(now.getFullYear(), quarter * 3, 1);
+                return { start: quarterStart, end: now };
+              case 'this-year':
+                const yearStart = new Date(now.getFullYear(), 0, 1);
+                return { start: yearStart, end: now };
+              case 'custom':
+                if (startDate && endDate) {
+                  return { start: new Date(startDate), end: new Date(endDate) };
+                }
+                return null;
+              case 'all':
+              default:
+                return null;
+            }
+          };
+
+          const filterByDateRange = (items, dateField) => {
+            if (periodType === 'all') return items;
+            
+            const range = getDateRange(periodType);
+            if (!range) return items;
+            
+            return items.filter(item => {
+              const itemDate = new Date(item[dateField]);
+              return itemDate >= range.start && itemDate <= range.end;
+            });
+          };
+
+          const generateStats = () => {
+            const filteredFaults = filterByDateRange(faults, 'created_at');
+            const filteredTokens = filterByDateRange(tokens, 'timestamp');
+            
+            const resolvedFaults = filteredFaults.filter(f => f.status === 'resolved');
+            
+            const responseTimes = filteredFaults.map(getResponseTime).filter(t => t !== null);
             const resolutionTimes = resolvedFaults.map(getResolutionTime).filter(t => t !== null);
             
             const avgResponseTime = responseTimes.length > 0 
@@ -341,17 +401,17 @@
               : 0;
 
             const channelStats = FAULT_SOURCES.reduce((acc, source) => {
-              acc[source] = faults.filter(f => f.source === source).length;
+              acc[source] = filteredFaults.filter(f => f.source === source).length;
               return acc;
             }, {});
 
             const locationStats = LOCATIONS.reduce((acc, location) => {
-              acc[location] = faults.filter(f => f.location === location).length;
+              acc[location] = filteredFaults.filter(f => f.location === location).length;
               return acc;
             }, {});
 
             const teamStats = TEAM_MEMBERS.reduce((acc, member) => {
-              const memberFaults = faults.filter(f => f.team_member === member);
+              const memberFaults = filteredFaults.filter(f => f.team_member === member);
               const memberResolved = memberFaults.filter(f => f.status === 'resolved');
               acc[member] = {
                 total: memberFaults.length,
@@ -362,15 +422,16 @@
             }, {});
 
             return {
-              total: faults.length,
+              total: filteredFaults.length,
               resolved: resolvedFaults.length,
-              inProgress: faults.filter(f => f.status === 'in-progress').length,
+              inProgress: filteredFaults.filter(f => f.status === 'in-progress').length,
               avgResponseTime,
               avgResolutionTime,
               lightsRestoredRate,
               channelStats,
               locationStats,
-              teamStats
+              teamStats,
+              totalTokens: filteredTokens.length
             };
           };
 
@@ -803,15 +864,33 @@
           }
 
           const stats = generateStats();
+          const filteredFaults = filterByDateRange(faults, 'created_at');
+          const filteredTokens = filterByDateRange(tokens, 'timestamp');
+
+          const getPeriodLabel = () => {
+            const labels = {
+              'all': 'All Time',
+              'today': 'Today',
+              'yesterday': 'Yesterday',
+              'this-week': 'This Week',
+              'last-week': 'Last Week',
+              'this-month': 'This Month',
+              'last-month': 'Last Month',
+              'this-quarter': 'This Quarter',
+              'this-year': 'This Year',
+              'custom': 'Custom Period'
+            };
+            return labels[periodType] || 'All Time';
+          };
 
           return (
             <div className="min-h-screen bg-gray-50 p-4">
               <div className="max-w-7xl mx-auto">
                 <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-                  <div className="flex justify-between items-center mb-6">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
                     <div>
-                      <h1 className="text-3xl font-bold text-gray-800">District Technical Officer Dashboard</h1>
-                      <p className="text-gray-600">ECG Saltpond Fault Tracking</p>
+                      <h1 className="text-2xl md:text-3xl font-bold text-gray-800">District Technical Officer Dashboard</h1>
+                      <p className="text-gray-600">ECG Saltpond Fault Tracking - {getPeriodLabel()}</p>
                     </div>
                     <div className="flex gap-2">
                       <button
@@ -825,8 +904,64 @@
                         onClick={() => setUserRole('')}
                         className="text-sm text-blue-600 hover:underline"
                       >
-                        Switch View
+                        Logout
                       </button>
+                    </div>
+                  </div>
+
+                  <div className="bg-blue-50 rounded-lg p-4 mb-6">
+                    <h3 className="text-sm font-semibold text-blue-800 mb-3">📅 Report Period Filter</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Select Period Type</label>
+                        <select
+                          value={periodType}
+                          onChange={(e) => setPeriodType(e.target.value)}
+                          className="w-full border border-gray-300 rounded-lg p-3 text-sm bg-white"
+                        >
+                          <option value="all">All Time (Cumulative)</option>
+                          <option value="today">Today</option>
+                          <option value="yesterday">Yesterday</option>
+                          <option value="this-week">This Week</option>
+                          <option value="last-week">Last Week</option>
+                          <option value="this-month">This Month</option>
+                          <option value="last-month">Last Month</option>
+                          <option value="this-quarter">This Quarter</option>
+                          <option value="this-year">This Year</option>
+                          <option value="custom">Custom Date Range</option>
+                        </select>
+                      </div>
+                      
+                      {periodType === 'custom' && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+                            <input
+                              type="date"
+                              value={startDate}
+                              onChange={(e) => setStartDate(e.target.value)}
+                              className="w-full border border-gray-300 rounded-lg p-3 text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
+                            <input
+                              type="date"
+                              value={endDate}
+                              onChange={(e) => setEndDate(e.target.value)}
+                              className="w-full border border-gray-300 rounded-lg p-3 text-sm"
+                            />
+                          </div>
+                        </div>
+                      )}
+                      
+                      {periodType !== 'custom' && periodType !== 'all' && (
+                        <div className="flex items-center bg-white rounded-lg p-3">
+                          <div className="text-sm text-gray-600">
+                            <strong>Showing:</strong> {getPeriodLabel()}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -936,29 +1071,29 @@
                       <div className="bg-white rounded-lg p-4">
                         <p className="text-gray-600 mb-2">Total Tokens</p>
                         <p className="text-3xl font-bold text-blue-600">
-                          {tokens.length}
+                          {stats.totalTokens}
                         </p>
                       </div>
                       <div className="bg-white rounded-lg p-4">
                         <p className="text-gray-600 mb-2">Total Faults</p>
                         <p className="text-3xl font-bold text-green-600">
-                          {faults.length}
+                          {stats.total}
                         </p>
                       </div>
                       <div className="bg-white rounded-lg p-4">
                         <p className="text-gray-600 mb-2">Resolved</p>
                         <p className="text-3xl font-bold text-purple-600">
-                          {faults.filter(f => f.status === 'resolved').length}
+                          {stats.resolved}
                         </p>
                       </div>
                     </div>
 
-                    {tokens.length > 0 && (
+                    {filteredTokens.length > 0 && (
                       <div>
                         <h3 className="font-semibold text-gray-800 mb-3">Meters Requiring Frequent Tokens</h3>
                         <div className="bg-white rounded-lg p-4">
                           {Object.entries(
-                            tokens.reduce((acc, token) => {
+                            filteredTokens.reduce((acc, token) => {
                               acc[token.meter_number] = (acc[token.meter_number] || 0) + 1;
                               return acc;
                             }, {})
@@ -1028,8 +1163,8 @@
                     </h2>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       {Object.entries(stats.teamStats).map(([member, data]) => {
-                        const memberTokens = tokens.filter(t => t.team_member === member);
-                        const avgResponseTimes = faults
+                        const memberTokens = filteredTokens.filter(t => t.team_member === member);
+                        const avgResponseTimes = filteredFaults
                           .filter(f => f.team_member === member)
                           .map(getResponseTime)
                           .filter(t => t !== null);
