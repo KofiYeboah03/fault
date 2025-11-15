@@ -73,6 +73,7 @@
           const [periodType, setPeriodType] = useState('all');
           const [startDate, setStartDate] = useState('');
           const [endDate, setEndDate] = useState('');
+          const [showAdvancedAnalytics, setShowAdvancedAnalytics] = useState(false);
 
           const [newFault, setNewFault] = useState({
             source: '',
@@ -376,6 +377,212 @@
               const itemDate = new Date(item[dateField]);
               return itemDate >= range.start && itemDate <= range.end;
             });
+          };
+
+          const calculateAdvancedMetrics = () => {
+            const filteredFaults = filterByDateRange(faults, 'created_at');
+            const filteredTokens = filterByDateRange(tokens, 'timestamp');
+
+            // 1. TREND ANALYSIS
+            const getDayKey = (date) => new Date(date).toISOString().split('T')[0];
+            const faultsByDay = filteredFaults.reduce((acc, fault) => {
+              const day = getDayKey(fault.created_at);
+              acc[day] = (acc[day] || 0) + 1;
+              return acc;
+            }, {});
+            
+            const sortedDays = Object.keys(faultsByDay).sort();
+            const dayOverDayGrowth = sortedDays.length > 1 
+              ? ((faultsByDay[sortedDays[sortedDays.length - 1]] - faultsByDay[sortedDays[sortedDays.length - 2]]) / faultsByDay[sortedDays[sortedDays.length - 2]] * 100)
+              : 0;
+
+            // 2. PERFORMANCE METRICS
+            const meterFaultCount = filteredFaults.reduce((acc, fault) => {
+              acc[fault.meter_number] = (acc[fault.meter_number] || 0) + 1;
+              return acc;
+            }, {});
+            
+            const repeatFaults = Object.values(meterFaultCount).filter(count => count > 1).length;
+            const repeatFaultRate = filteredFaults.length > 0 
+              ? (repeatFaults / Object.keys(meterFaultCount).length * 100)
+              : 0;
+
+            const resolvedFaults = filteredFaults.filter(f => f.status === 'resolved');
+            const firstTimeFixRate = resolvedFaults.length > 0
+              ? (resolvedFaults.filter(f => meterFaultCount[f.meter_number] === 1).length / resolvedFaults.length * 100)
+              : 0;
+
+            const faultHours = filteredFaults.map(f => new Date(f.created_at).getHours());
+            const peakHour = faultHours.length > 0
+              ? faultHours.reduce((acc, hour) => {
+                  acc[hour] = (acc[hour] || 0) + 1;
+                  return acc;
+                }, {})
+              : {};
+            const peakHourValue = Object.entries(peakHour).sort((a, b) => b[1] - a[1])[0] || ['N/A', 0];
+
+            const responseTimes = filteredFaults.map(getResponseTime).filter(t => t !== null).sort((a, b) => a - b);
+            const responseStats = {
+              min: responseTimes.length > 0 ? responseTimes[0] : 0,
+              max: responseTimes.length > 0 ? responseTimes[responseTimes.length - 1] : 0,
+              median: responseTimes.length > 0 ? responseTimes[Math.floor(responseTimes.length / 2)] : 0,
+              p95: responseTimes.length > 0 ? responseTimes[Math.floor(responseTimes.length * 0.95)] : 0
+            };
+
+            const resolutionByType = FAULT_TYPES.reduce((acc, type) => {
+              const typeFaults = resolvedFaults.filter(f => f.fault_type === type);
+              const times = typeFaults.map(getResolutionTime).filter(t => t !== null);
+              acc[type] = times.length > 0 ? Math.round(times.reduce((a, b) => a + b, 0) / times.length) : 0;
+              return acc;
+            }, {});
+
+            // 3. EFFICIENCY METRICS
+            const getTravelTime = (fault) => {
+              if (!fault.departed_time || !fault.arrived_time) return null;
+              const departed = new Date(fault.departed_time);
+              const arrived = new Date(fault.arrived_time);
+              return Math.round((arrived - departed) / (1000 * 60));
+            };
+
+            const travelTimes = filteredFaults.map(getTravelTime).filter(t => t !== null);
+            const avgTravelTime = travelTimes.length > 0
+              ? Math.round(travelTimes.reduce((a, b) => a + b, 0) / travelTimes.length)
+              : 0;
+
+            const tokenToFaultRatio = filteredFaults.length > 0
+              ? (filteredTokens.length / filteredFaults.length * 100)
+              : 0;
+
+            const teamEfficiency = TEAM_MEMBERS.reduce((acc, member) => {
+              const memberFaults = filteredFaults.filter(f => f.team_member === member);
+              const uniqueDays = new Set(memberFaults.map(f => getDayKey(f.created_at))).size;
+              const faultsPerDay = uniqueDays > 0 ? memberFaults.length / uniqueDays : 0;
+              
+              const memberResolved = memberFaults.filter(f => f.status === 'resolved');
+              const workingMinutes = memberResolved.map(f => {
+                if (!f.arrived_time || !f.resolved_time) return 0;
+                return (new Date(f.resolved_time) - new Date(f.arrived_time)) / (1000 * 60);
+              }).reduce((a, b) => a + b, 0);
+              
+              const faultsPerHour = workingMinutes > 0 ? (memberResolved.length / (workingMinutes / 60)) : 0;
+
+              acc[member] = {
+                faultsPerDay: faultsPerDay.toFixed(2),
+                faultsPerHour: faultsPerHour.toFixed(2),
+                totalWorkingHours: (workingMinutes / 60).toFixed(2)
+              };
+              return acc;
+            }, {});
+
+            // 4. PREDICTIVE INDICATORS
+            const highRiskMeters = Object.entries(meterFaultCount)
+              .filter(([meter, count]) => count >= 3)
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 10);
+
+            const locationRisk = LOCATIONS.reduce((acc, location) => {
+              const locationFaults = filteredFaults.filter(f => f.location === location);
+              const avgResolutionTime = locationFaults.length > 0
+                ? locationFaults.map(getResolutionTime).filter(t => t !== null).reduce((a, b) => a + b, 0) / locationFaults.length
+                : 0;
+              acc[location] = {
+                count: locationFaults.length,
+                avgResolution: avgResolutionTime
+              };
+              return acc;
+            }, {});
+
+            const faultTypesByLocation = LOCATIONS.reduce((acc, location) => {
+              const locationFaults = filteredFaults.filter(f => f.location === location);
+              const types = locationFaults.reduce((t, f) => {
+                if (f.fault_type) t[f.fault_type] = (t[f.fault_type] || 0) + 1;
+                return t;
+              }, {});
+              acc[location] = types;
+              return acc;
+            }, {});
+
+            // 5. COMPARATIVE ANALYTICS
+            const dayOfWeekStats = filteredFaults.reduce((acc, fault) => {
+              const day = new Date(fault.created_at).getDay();
+              const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][day];
+              acc[dayName] = (acc[dayName] || 0) + 1;
+              return acc;
+            }, {});
+
+            const bestWorstDays = Object.entries(dayOfWeekStats).sort((a, b) => b[1] - a[1]);
+
+            // 6. QUALITY METRICS
+            const customerSatisfaction = TEAM_MEMBERS.reduce((acc, member) => {
+              const memberResolved = resolvedFaults.filter(f => f.team_member === member);
+              const lightsRestored = memberResolved.filter(f => f.lights_restored === true).length;
+              acc[member] = memberResolved.length > 0 ? (lightsRestored / memberResolved.length * 100).toFixed(1) : 0;
+              return acc;
+            }, {});
+
+            const recurrentMeters = Object.entries(meterFaultCount).filter(([m, c]) => c > 2).length;
+            const faultRecurrenceRate = Object.keys(meterFaultCount).length > 0
+              ? (recurrentMeters / Object.keys(meterFaultCount).length * 100)
+              : 0;
+
+            return {
+              trend: {
+                dayOverDayGrowth: dayOverDayGrowth.toFixed(1),
+                faultsByDay
+              },
+              performance: {
+                firstTimeFixRate: firstTimeFixRate.toFixed(1),
+                repeatFaultRate: repeatFaultRate.toFixed(1),
+                peakHour: `${peakHourValue[0]}:00 (${peakHourValue[1]} faults)`,
+                responseStats,
+                resolutionByType
+              },
+              efficiency: {
+                avgTravelTime,
+                tokenToFaultRatio: tokenToFaultRatio.toFixed(1),
+                teamEfficiency
+              },
+              predictive: {
+                highRiskMeters,
+                locationRisk,
+                faultTypesByLocation
+              },
+              comparative: {
+                dayOfWeekStats,
+                bestDay: bestWorstDays[0] || ['N/A', 0],
+                worstDay: bestWorstDays[bestWorstDays.length - 1] || ['N/A', 0]
+              },
+              quality: {
+                customerSatisfaction,
+                faultRecurrenceRate: faultRecurrenceRate.toFixed(1)
+              }
+            };
+          };
+
+          const exportToCSV = () => {
+            const filteredFaults = filterByDateRange(faults, 'created_at');
+            const filteredTokens = filterByDateRange(tokens, 'timestamp');
+            
+            let csv = 'FAULTS REPORT\n\n';
+            csv += 'ID,Meter Number,Location,Source,Team Member,Status,Reported Time,Departed Time,Arrived Time,Resolved Time,Fault Type,Lights Restored,Response Time (min),Resolution Time (min)\n';
+            
+            filteredFaults.forEach(fault => {
+              csv += `${fault.id},${fault.meter_number},${fault.location},${fault.source},${fault.team_member},${fault.status},${fault.reported_time},${fault.departed_time || ''},${fault.arrived_time || ''},${fault.resolved_time || ''},${fault.fault_type || ''},${fault.lights_restored},${getResponseTime(fault) || ''},${getResolutionTime(fault) || ''}\n`;
+            });
+            
+            csv += '\n\nTOKENS REPORT\n\n';
+            csv += 'ID,Meter Number,Location,Reason,Team Member,Timestamp\n';
+            
+            filteredTokens.forEach(token => {
+              csv += `${token.id},${token.meter_number},${token.location},${token.reason || ''},${token.team_member},${token.timestamp}\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `ECG_Saltpond_Report_${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
           };
 
           const generateStats = () => {
@@ -866,6 +1073,7 @@
           const stats = generateStats();
           const filteredFaults = filterByDateRange(faults, 'created_at');
           const filteredTokens = filterByDateRange(tokens, 'timestamp');
+          const advancedMetrics = calculateAdvancedMetrics();
 
           const getPeriodLabel = () => {
             const labels = {
@@ -906,8 +1114,248 @@
                       >
                         Logout
                       </button>
+                      <button
+                        onClick={exportToCSV}
+                        className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm font-semibold"
+                      >
+                        📥 Export CSV
+                      </button>
                     </div>
                   </div>
+
+                  <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg p-4 mb-6">
+                    <button
+                      onClick={() => setShowAdvancedAnalytics(!showAdvancedAnalytics)}
+                      className="w-full flex items-center justify-between text-left"
+                    >
+                      <div className="flex items-center gap-2">
+                        <TrendingUp />
+                        <span className="font-bold text-gray-800">Advanced Statistical Analytics</span>
+                      </div>
+                      <span className="text-2xl">{showAdvancedAnalytics ? '▼' : '▶'}</span>
+                    </button>
+                  </div>
+
+                  {showAdvancedAnalytics && (
+                    <div className="space-y-6 mb-6">
+                      {/* 1. TREND ANALYSIS */}
+                      <div className="bg-white rounded-lg shadow p-6">
+                        <h3 className="text-lg font-bold text-gray-800 mb-4">📈 Trend Analysis</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="bg-blue-50 p-4 rounded-lg">
+                            <p className="text-sm text-gray-600 mb-1">Day-over-Day Growth</p>
+                            <p className={`text-3xl font-bold ${parseFloat(advancedMetrics.trend.dayOverDayGrowth) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                              {advancedMetrics.trend.dayOverDayGrowth}%
+                            </p>
+                          </div>
+                          <div className="bg-gray-50 p-4 rounded-lg">
+                            <p className="text-sm text-gray-600 mb-2">Faults by Day (Last 7 Days)</p>
+                            <div className="space-y-1">
+                              {Object.entries(advancedMetrics.trend.faultsByDay).slice(-7).map(([day, count]) => (
+                                <div key={day} className="flex justify-between text-sm">
+                                  <span>{day}</span>
+                                  <span className="font-semibold">{count}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 2. PERFORMANCE METRICS */}
+                      <div className="bg-white rounded-lg shadow p-6">
+                        <h3 className="text-lg font-bold text-gray-800 mb-4">🎯 Performance Metrics</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                          <div className="bg-green-50 p-4 rounded-lg">
+                            <p className="text-sm text-gray-600 mb-1">First-Time Fix Rate</p>
+                            <p className="text-3xl font-bold text-green-600">{advancedMetrics.performance.firstTimeFixRate}%</p>
+                          </div>
+                          <div className="bg-yellow-50 p-4 rounded-lg">
+                            <p className="text-sm text-gray-600 mb-1">Repeat Fault Rate</p>
+                            <p className="text-3xl font-bold text-yellow-600">{advancedMetrics.performance.repeatFaultRate}%</p>
+                          </div>
+                          <div className="bg-purple-50 p-4 rounded-lg">
+                            <p className="text-sm text-gray-600 mb-1">Peak Fault Hour</p>
+                            <p className="text-xl font-bold text-purple-600">{advancedMetrics.performance.peakHour}</p>
+                          </div>
+                        </div>
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                          <p className="text-sm font-semibold text-gray-700 mb-3">Response Time Distribution</p>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                            <div>
+                              <span className="text-gray-600">Min:</span>
+                              <span className="ml-2 font-semibold">{advancedMetrics.performance.responseStats.min}m</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-600">Median:</span>
+                              <span className="ml-2 font-semibold">{advancedMetrics.performance.responseStats.median}m</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-600">95th %ile:</span>
+                              <span className="ml-2 font-semibold">{advancedMetrics.performance.responseStats.p95}m</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-600">Max:</span>
+                              <span className="ml-2 font-semibold">{advancedMetrics.performance.responseStats.max}m</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="bg-gray-50 p-4 rounded-lg mt-4">
+                          <p className="text-sm font-semibold text-gray-700 mb-3">Avg Resolution Time by Fault Type</p>
+                          <div className="space-y-2">
+                            {Object.entries(advancedMetrics.performance.resolutionByType).map(([type, time]) => (
+                              <div key={type} className="flex justify-between items-center">
+                                <span className="text-sm text-gray-600">{type}</span>
+                                <span className="font-semibold text-blue-600">{time}m</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 3. EFFICIENCY METRICS */}
+                      <div className="bg-white rounded-lg shadow p-6">
+                        <h3 className="text-lg font-bold text-gray-800 mb-4">⚡ Efficiency Metrics</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                          <div className="bg-indigo-50 p-4 rounded-lg">
+                            <p className="text-sm text-gray-600 mb-1">Avg Travel Time</p>
+                            <p className="text-3xl font-bold text-indigo-600">{advancedMetrics.efficiency.avgTravelTime}m</p>
+                          </div>
+                          <div className="bg-orange-50 p-4 rounded-lg">
+                            <p className="text-sm text-gray-600 mb-1">Token-to-Fault Ratio</p>
+                            <p className="text-3xl font-bold text-orange-600">{advancedMetrics.efficiency.tokenToFaultRatio}%</p>
+                          </div>
+                        </div>
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                          <p className="text-sm font-semibold text-gray-700 mb-3">Team Efficiency Breakdown</p>
+                          <div className="space-y-3">
+                            {Object.entries(advancedMetrics.efficiency.teamEfficiency).map(([member, data]) => (
+                              <div key={member} className="border-b pb-2">
+                                <p className="font-semibold text-gray-800 mb-1">{member}</p>
+                                <div className="grid grid-cols-3 gap-2 text-sm">
+                                  <div>
+                                    <span className="text-gray-600">Per Day:</span>
+                                    <span className="ml-1 font-semibold">{data.faultsPerDay}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-gray-600">Per Hour:</span>
+                                    <span className="ml-1 font-semibold">{data.faultsPerHour}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-gray-600">Work Hrs:</span>
+                                    <span className="ml-1 font-semibold">{data.totalWorkingHours}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 4. PREDICTIVE INDICATORS */}
+                      <div className="bg-white rounded-lg shadow p-6">
+                        <h3 className="text-lg font-bold text-gray-800 mb-4">🔮 Predictive Indicators</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="bg-red-50 p-4 rounded-lg">
+                            <p className="text-sm font-semibold text-gray-700 mb-3">High-Risk Meters (3+ Faults)</p>
+                            <div className="space-y-2 max-h-64 overflow-y-auto">
+                              {advancedMetrics.predictive.highRiskMeters.map(([meter, count]) => (
+                                <div key={meter} className="flex justify-between items-center bg-white p-2 rounded">
+                                  <span className="font-mono text-sm">{meter}</span>
+                                  <span className="bg-red-200 text-red-700 px-2 py-1 rounded text-xs font-bold">{count} faults</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="bg-yellow-50 p-4 rounded-lg">
+                            <p className="text-sm font-semibold text-gray-700 mb-3">High-Risk Locations</p>
+                            <div className="space-y-2 max-h-64 overflow-y-auto">
+                              {Object.entries(advancedMetrics.predictive.locationRisk)
+                                .filter(([loc, data]) => data.count > 0)
+                                .sort((a, b) => b[1].count - a[1].count)
+                                .slice(0, 10)
+                                .map(([location, data]) => (
+                                  <div key={location} className="flex justify-between items-center bg-white p-2 rounded text-sm">
+                                    <span>{location}</span>
+                                    <div className="flex gap-2">
+                                      <span className="text-gray-600">{data.count} faults</span>
+                                      <span className="text-orange-600 font-semibold">{data.avgResolution.toFixed(0)}m avg</span>
+                                    </div>
+                                  </div>
+                                ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 5. COMPARATIVE ANALYTICS */}
+                      <div className="bg-white rounded-lg shadow p-6">
+                        <h3 className="text-lg font-bold text-gray-800 mb-4">📊 Comparative Analytics</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="bg-gray-50 p-4 rounded-lg">
+                            <p className="text-sm font-semibold text-gray-700 mb-3">Faults by Day of Week</p>
+                            <div className="space-y-2">
+                              {Object.entries(advancedMetrics.comparative.dayOfWeekStats)
+                                .sort((a, b) => b[1] - a[1])
+                                .map(([day, count]) => (
+                                  <div key={day} className="flex justify-between items-center">
+                                    <span className="text-sm">{day}</span>
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-24 bg-gray-200 rounded-full h-2">
+                                        <div
+                                          className="bg-blue-600 h-2 rounded-full"
+                                          style={{ width: `${(count / Math.max(...Object.values(advancedMetrics.comparative.dayOfWeekStats))) * 100}%` }}
+                                        ></div>
+                                      </div>
+                                      <span className="font-semibold text-sm w-8 text-right">{count}</span>
+                                    </div>
+                                  </div>
+                                ))}
+                            </div>
+                          </div>
+                          <div className="space-y-4">
+                            <div className="bg-green-50 p-4 rounded-lg">
+                              <p className="text-sm text-gray-600 mb-1">Best Performing Day</p>
+                              <p className="text-2xl font-bold text-green-600">{advancedMetrics.comparative.bestDay[0]}</p>
+                              <p className="text-sm text-gray-600">Least faults: {advancedMetrics.comparative.bestDay[1]}</p>
+                            </div>
+                            <div className="bg-red-50 p-4 rounded-lg">
+                              <p className="text-sm text-gray-600 mb-1">Busiest Day</p>
+                              <p className="text-2xl font-bold text-red-600">{advancedMetrics.comparative.worstDay[0]}</p>
+                              <p className="text-sm text-gray-600">Most faults: {advancedMetrics.comparative.worstDay[1]}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 6. QUALITY METRICS */}
+                      <div className="bg-white rounded-lg shadow p-6">
+                        <h3 className="text-lg font-bold text-gray-800 mb-4">⭐ Quality Metrics</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="bg-purple-50 p-4 rounded-lg">
+                            <p className="text-sm font-semibold text-gray-700 mb-3">Customer Satisfaction Proxy<br/>(Lights Restored Rate by Member)</p>
+                            <div className="space-y-2">
+                              {Object.entries(advancedMetrics.quality.customerSatisfaction)
+                                .sort((a, b) => b[1] - a[1])
+                                .map(([member, rate]) => (
+                                  <div key={member} className="flex justify-between items-center">
+                                    <span className="text-sm font-semibold">{member}</span>
+                                    <span className={`font-bold ${parseFloat(rate) >= 80 ? 'text-green-600' : parseFloat(rate) >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                      {rate}%
+                                    </span>
+                                  </div>
+                                ))}
+                            </div>
+                          </div>
+                          <div className="bg-orange-50 p-4 rounded-lg">
+                            <p className="text-sm text-gray-600 mb-1">Fault Recurrence Rate</p>
+                            <p className="text-4xl font-bold text-orange-600">{advancedMetrics.quality.faultRecurrenceRate}%</p>
+                            <p className="text-sm text-gray-600 mt-2">Meters with 3+ faults</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="bg-blue-50 rounded-lg p-4 mb-6">
                     <h3 className="text-sm font-semibold text-blue-800 mb-3">📅 Report Period Filter</h3>
