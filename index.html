@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ECG Saltpond Fault Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        const { createClient } = supabase;
+
+        // Lucide icons as inline SVG components
+        const Calendar = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>;
+        const Clock = ({ className = "w-6 h-6" }) => <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
+        const MapPin = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>;
+        const Users = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>;
+        const TrendingUp = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>;
+        const AlertCircle = () => <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
+        const CheckCircle = ({ className = "w-12 h-12" }) => <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
+        const Phone = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>;
+        const Building = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>;
+        const Zap = () => <svg className="w-16 h-16 mx-auto text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>;
+        const Settings = ({ className = "w-6 h-6" }) => <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>;
+
+        const LOCATIONS = [
+          'Saltpond', 'Mankessim', 'Ekumfi', 'Biriwa', 'Egyaa No. 1', 
+          'Egyaa No. 2', 'Egyaa No. 3', 'Anomabo', 'Abandze', 
+          'Kormantse', 'Abura Dunkwa', 'Fanti-Nyankumasi'
+        ];
+
+        const FAULT_TYPES = [
+          'Bad wiring',
+          'Load mismatch',
+          'Cover not closed well',
+          'Cover tightened too much',
+          'Burnt meter'
+        ];
+
+        const TEAM_MEMBERS = ['Ofori', 'Daniel', 'David'];
+        const FAULT_SOURCES = ['Front Desk', 'WhatsApp Group', 'Call Line'];
+
+        const FaultTracker = () => {
+          const [supabase, setSupabase] = useState(null);
+          const [isConfigured, setIsConfigured] = useState(false);
+          const [showConfig, setShowConfig] = useState(false);
+          const [supabaseUrl, setSupabaseUrl] = useState('');
+          const [supabaseKey, setSupabaseKey] = useState('');
+          
+          const [userRole, setUserRole] = useState('');
+          const [teamMember, setTeamMember] = useState('');
+          const [faults, setFaults] = useState([]);
+          const [tokens, setTokens] = useState([]);
+          const [activeView, setActiveView] = useState('dashboard');
+          const [loading, setLoading] = useState(false);
+
+          const [newFault, setNewFault] = useState({
+            source: '',
+            location: '',
+            meterNumber: '',
+            reportedTime: '',
+            departedTime: '',
+            arrivedTime: '',
+            resolvedTime: '',
+            faultType: '',
+            lightsRestored: null,
+            teamMember: ''
+          });
+
+          const [newToken, setNewToken] = useState({
+            meterNumber: '',
+            location: '',
+            reason: '',
+            teamMember: ''
+          });
+
+          useEffect(() => {
+            const savedUrl = localStorage.getItem('supabase_url');
+            const savedKey = localStorage.getItem('supabase_key');
+            
+            if (savedUrl && savedKey) {
+              setSupabaseUrl(savedUrl);
+              setSupabaseKey(savedKey);
+              initializeSupabase(savedUrl, savedKey);
+            } else {
+              setShowConfig(true);
+            }
+          }, []);
+
+          const initializeSupabase = (url, key) => {
+            try {
+              const client = createClient(url, key);
+              setSupabase(client);
+              setIsConfigured(true);
+              setShowConfig(false);
+            } catch (error) {
+              console.error('Error initializing Supabase:', error);
+              alert('Error connecting to Supabase. Please check your credentials.');
+            }
+          };
+
+          const handleSaveConfig = () => {
+            if (!supabaseUrl || !supabaseKey) {
+              alert('Please enter both Supabase URL and API Key');
+              return;
+            }
+            
+            localStorage.setItem('supabase_url', supabaseUrl);
+            localStorage.setItem('supabase_key', supabaseKey);
+            initializeSupabase(supabaseUrl, supabaseKey);
+            loadData();
+          };
+
+          const handleResetConfig = () => {
+            localStorage.removeItem('supabase_url');
+            localStorage.removeItem('supabase_key');
+            setSupabaseUrl('');
+            setSupabaseKey('');
+            setSupabase(null);
+            setIsConfigured(false);
+            setShowConfig(true);
+          };
+
+          useEffect(() => {
+            if (isConfigured && supabase) {
+              loadData();
+            }
+          }, [isConfigured, supabase]);
+
+          const loadData = async () => {
+            if (!supabase) return;
+            
+            setLoading(true);
+            try {
+              const { data: faultsData, error: faultsError } = await supabase
+                .from('faults')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+              if (faultsError) throw faultsError;
+
+              const { data: tokensData, error: tokensError } = await supabase
+                .from('tokens')
+                .select('*')
+                .order('timestamp', { ascending: false });
+
+              if (tokensError) throw tokensError;
+
+              setFaults(faultsData || []);
+              setTokens(tokensData || []);
+            } catch (error) {
+              console.error('Error loading data:', error);
+              alert('Error loading data from Supabase: ' + error.message);
+            }
+            setLoading(false);
+          };
+
+          const saveFault = async (fault) => {
+            if (!supabase) return false;
+            
+            try {
+              const faultData = {
+                id: `fault_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                source: fault.source,
+                location: fault.location,
+                meter_number: fault.meterNumber,
+                reported_time: fault.reportedTime,
+                departed_time: fault.departedTime || null,
+                arrived_time: fault.arrivedTime || null,
+                resolved_time: fault.resolvedTime || null,
+                fault_type: fault.faultType || null,
+                lights_restored: fault.lightsRestored,
+                team_member: fault.teamMember,
+                status: fault.status,
+                created_at: fault.createdAt
+              };
+
+              const { error } = await supabase
+                .from('faults')
+                .insert([faultData]);
+
+              if (error) throw error;
+
+              await loadData();
+              return true;
+            } catch (error) {
+              console.error('Error saving fault:', error);
+              alert('Error saving fault: ' + error.message);
+              return false;
+            }
+          };
+
+          const saveToken = async (token) => {
+            if (!supabase) return false;
+            
+            try {
+              const tokenData = {
+                id: `token_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                meter_number: token.meterNumber,
+                location: token.location,
+                reason: token.reason || null,
+                team_member: token.teamMember,
+                timestamp: token.timestamp
+              };
+
+              const { error } = await supabase
+                .from('tokens')
+                .insert([tokenData]);
+
+              if (error) throw error;
+
+              await loadData();
+              return true;
+            } catch (error) {
+              console.error('Error saving token:', error);
+              alert('Error saving token: ' + error.message);
+              return false;
+            }
+          };
+
+          const handleSubmitFault = async (e) => {
+            e.preventDefault();
+            const fault = {
+              ...newFault,
+              teamMember: teamMember,
+              id: Date.now(),
+              status: newFault.resolvedTime ? 'resolved' : newFault.arrivedTime ? 'in-progress' : 'assigned',
+              createdAt: new Date().toISOString()
+            };
+            
+            const success = await saveFault(fault);
+            if (success) {
+              setNewFault({
+                source: '',
+                location: '',
+                meterNumber: '',
+                reportedTime: '',
+                departedTime: '',
+                arrivedTime: '',
+                resolvedTime: '',
+                faultType: '',
+                lightsRestored: null,
+                teamMember: ''
+              });
+              alert('Fault logged successfully!');
+            }
+          };
+
+          const handleSubmitToken = async (e) => {
+            e.preventDefault();
+            const token = {
+              ...newToken,
+              teamMember: teamMember,
+              id: Date.now(),
+              timestamp: new Date().toISOString()
+            };
+            
+            const success = await saveToken(token);
+            if (success) {
+              setNewToken({
+                meterNumber: '',
+                location: '',
+                reason: '',
+                teamMember: ''
+              });
+              alert('Token generation logged successfully!');
+            }
+          };
+
+          const getResponseTime = (fault) => {
+            if (!fault.reported_time || !fault.arrived_time) return null;
+            const reported = new Date(fault.reported_time);
+            const arrived = new Date(fault.arrived_time);
+            return Math.round((arrived - reported) / (1000 * 60));
+          };
+
+          const getResolutionTime = (fault) => {
+            if (!fault.arrived_time || !fault.resolved_time) return null;
+            const arrived = new Date(fault.arrived_time);
+            const resolved = new Date(fault.resolved_time);
+            return Math.round((resolved - arrived) / (1000 * 60));
+          };
+
+          const generateStats = () => {
+            const resolvedFaults = faults.filter(f => f.status === 'resolved');
+            
+            const responseTimes = faults.map(getResponseTime).filter(t => t !== null);
+            const resolutionTimes = resolvedFaults.map(getResolutionTime).filter(t => t !== null);
+            
+            const avgResponseTime = responseTimes.length > 0 
+              ? Math.round(responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length)
+              : 0;
+            
+            const avgResolutionTime = resolutionTimes.length > 0
+              ? Math.round(resolutionTimes.reduce((a, b) => a + b, 0) / resolutionTimes.length)
+              : 0;
+
+            const lightsRestoredCount = resolvedFaults.filter(f => f.lights_restored === true).length;
+            const lightsRestoredRate = resolvedFaults.length > 0 
+              ? Math.round((lightsRestoredCount / resolvedFaults.length) * 100)
+              : 0;
+
+            const channelStats = FAULT_SOURCES.reduce((acc, source) => {
+              acc[source] = faults.filter(f => f.source === source).length;
+              return acc;
+            }, {});
+
+            const locationStats = LOCATIONS.reduce((acc, location) => {
+              acc[location] = faults.filter(f => f.location === location).length;
+              return acc;
+            }, {});
+
+            const teamStats = TEAM_MEMBERS.reduce((acc, member) => {
+              const memberFaults = faults.filter(f => f.team_member === member);
+              const memberResolved = memberFaults.filter(f => f.status === 'resolved');
+              acc[member] = {
+                total: memberFaults.length,
+                resolved: memberResolved.length,
+                lightsRestored: memberResolved.filter(f => f.lights_restored === true).length
+              };
+              return acc;
+            }, {});
+
+            return {
+              total: faults.length,
+              resolved: resolvedFaults.length,
+              inProgress: faults.filter(f => f.status === 'in-progress').length,
+              avgResponseTime,
+              avgResolutionTime,
+              lightsRestoredRate,
+              channelStats,
+              locationStats,
+              teamStats
+            };
+          };
+
+          if (!isConfigured || showConfig) {
+            return (
+              <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 flex items-center justify-center">
+                <div className="max-w-md w-full bg-white rounded-lg shadow-xl p-8">
+                  <div className="text-center mb-6">
+                    <Settings className="w-16 h-16 mx-auto text-blue-600 mb-4" />
+                    <h1 className="text-2xl font-bold text-gray-800">Supabase Configuration</h1>
+                    <p className="text-gray-600 mt-2">Connect to your Supabase database</p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Supabase Project URL
+                      </label>
+                      <input
+                        type="text"
+                        value={supabaseUrl}
+                        onChange={(e) => setSupabaseUrl(e.target.value)}
+                        placeholder="https://your-project.supabase.co"
+                        className="w-full border border-gray-300 rounded-lg p-3"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Supabase Anon/Public Key
+                      </label>
+                      <input
+                        type="password"
+                        value={supabaseKey}
+                        onChange={(e) => setSupabaseKey(e.target.value)}
+                        placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                        className="w-full border border-gray-300 rounded-lg p-3"
+                      />
+                    </div>
+
+                    <button
+                      onClick={handleSaveConfig}
+                      className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition font-semibold"
+                    >
+                      Connect to Supabase
+                    </button>
+
+                    <div className="mt-6 p-4 bg-yellow-50 rounded-lg">
+                      <p className="text-sm text-yellow-800">
+                        <strong>Setup Instructions:</strong>
+                      </p>
+                      <ol className="text-sm text-yellow-800 mt-2 space-y-1 list-decimal list-inside">
+                        <li>Create a Supabase account at supabase.com</li>
+                        <li>Create a new project</li>
+                        <li>Run the SQL schema provided in setup instructions</li>
+                        <li>Get your Project URL and API Key from Settings → API</li>
+                        <li>Enter them above and click Connect</li>
+                      </ol>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          if (!userRole || (userRole === 'field' && !teamMember)) {
+            return (
+              <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+                <div className="max-w-md mx-auto mt-20">
+                  <div className="bg-white rounded-lg shadow-xl p-8">
+                    <div className="flex justify-between items-center mb-6">
+                      <div className="text-center flex-1">
+                        <Zap />
+                        <h1 className="text-2xl font-bold text-gray-800">ECG Saltpond</h1>
+                        <p className="text-gray-600">Fault Tracking System</p>
+                      </div>
+                      <button
+                        onClick={() => setShowConfig(true)}
+                        className="text-gray-400 hover:text-gray-600"
+                        title="Reconfigure Supabase"
+                      >
+                        <Settings />
+                      </button>
+                    </div>
+                    
+                    {!userRole ? (
+                      <div className="space-y-4">
+                        <button
+                          onClick={() => setUserRole('officer')}
+                          className="w-full bg-blue-600 text-white py-4 rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2"
+                        >
+                          <Building />
+                          District Officer Dashboard
+                        </button>
+                        <button
+                          onClick={() => setUserRole('field')}
+                          className="w-full bg-green-600 text-white py-4 rounded-lg hover:bg-green-700 transition flex items-center justify-center gap-2"
+                        >
+                          <Users />
+                          Field Team Entry
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <button
+                          onClick={() => setUserRole('')}
+                          className="text-sm text-blue-600 hover:underline mb-4"
+                        >
+                          ← Back
+                        </button>
+                        <h2 className="text-lg font-semibold mb-4">Select Team Member</h2>
+                        {TEAM_MEMBERS.map(member => (
+                          <button
+                            key={member}
+                            onClick={() => setTeamMember(member)}
+                            className="w-full bg-gray-100 hover:bg-gray-200 py-3 rounded-lg transition"
+                          >
+                            {member}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {!userRole && (
+                    <>
+                      <div className="bg-gray-50 rounded-lg p-6 mb-6 mt-6">
+                        <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                          <TrendingUp />
+                          Token Generation Activity
+                        </h2>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="bg-white rounded-lg p-4">
+                            <p className="text-gray-600 mb-2">Total Tokens</p>
+                            <p className="text-3xl font-bold text-blue-600">
+                              {tokens.length}
+                            </p>
+                          </div>
+                          <div className="bg-white rounded-lg p-4">
+                            <p className="text-gray-600 mb-2">Total Faults</p>
+                            <p className="text-3xl font-bold text-green-600">
+                              {faults.length}
+                            </p>
+                          </div>
+                          <div className="bg-white rounded-lg p-4">
+                            <p className="text-gray-600 mb-2">Resolved</p>
+                            <p className="text-3xl font-bold text-purple-600">
+                              {faults.filter(f => f.status === 'resolved').length}
+                            </p>
+                          </div>
+                        </div>
+
+                        {tokens.length > 0 && (
+                          <div className="mt-4">
+                            <h3 className="font-semibold text-gray-800 mb-3">Meters Requiring Frequent Tokens</h3>
+                            <div className="bg-white rounded-lg p-4">
+                              {Object.entries(
+                                tokens.reduce((acc, token) => {
+                                  acc[token.meter_number] = (acc[token.meter_number] || 0) + 1;
+                                  return acc;
+                                }, {})
+                              )
+                                .sort((a, b) => b[1] - a[1])
+                                .slice(0, 5)
+                                .map(([meter, count]) => (
+                                  <div key={meter} className="flex justify-between py-2 border-b last:border-b-0">
+                                    <span className="text-gray-700 font-mono">{meter}</span>
+                                    <span className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-sm font-semibold">
+                                      {count} tokens
+                                    </span>
+                                  </div>
+                                ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="bg-gray-50 rounded-lg p-6">
+                        <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                          <Calendar />
+                          Recent Faults
+                        </h2>
+                        <div className="space-y-3">
+                          {faults
+                            .slice(0, 10)
+                            .map((fault) => (
+                              <div key={fault.id} className="bg-white rounded-lg p-4 border-l-4 border-blue-500">
+                                <div className="flex flex-wrap justify-between items-start gap-2 mb-2">
+                                  <div>
+                                    <span className="font-semibold text-gray-800">
+                                      Meter: {fault.meter_number}
+                                    </span>
+                                    <span className="text-gray-600 ml-2">• {fault.location}</span>
+                                  </div>
+                                  <span
+                                    className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                                      fault.status === 'resolved'
+                                        ? 'bg-green-100 text-green-700'
+                                        : fault.status === 'in-progress'
+                                        ? 'bg-yellow-100 text-yellow-700'
+                                        : 'bg-gray-100 text-gray-700'
+                                    }`}
+                                  >
+                                    {fault.status === 'resolved' ? 'Resolved' : fault.status === 'in-progress' ? 'In Progress' : 'Assigned'}
+                                  </span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 text-sm text-gray-600 mb-2">
+                                  <div>
+                                    <span className="font-semibold">Team:</span> {fault.team_member}
+                                  </div>
+                                  <div>
+                                    <span className="font-semibold">Source:</span> {fault.source}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          }
+
+          if (userRole === 'field') {
+            return (
+              <div className="min-h-screen bg-gray-50 p-4">
+                <div className="max-w-2xl mx-auto">
+                  <div className="bg-white rounded-lg shadow-lg p-6 mb-4">
+                    <div className="flex justify-between items-center mb-6">
+                      <div>
+                        <h1 className="text-2xl font-bold text-gray-800">Field Entry</h1>
+                        <p className="text-gray-600">Logged in as: {teamMember}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setShowConfig(true)}
+                          className="text-gray-400 hover:text-gray-600"
+                          title="Reconfigure Supabase"
+                        >
+                          <Settings className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setUserRole('');
+                            setTeamMember('');
+                          }}
+                          className="text-sm text-blue-600 hover:underline"
+                        >
+                          Logout
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2 mb-6">
+                      <button
+                        onClick={() => setActiveView('log-fault')}
+                        className={`flex-1 py-3 rounded-lg transition ${
+                          activeView === 'log-fault' 
+                            ? 'bg-blue-600 text-white' 
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        Log Fault
+                      </button>
+                      <button
+                        onClick={() => setActiveView('log-token')}
+                        className={`flex-1 py-3 rounded-lg transition ${
+                          activeView === 'log-token' 
+                            ? 'bg-green-600 text-white' 
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        Log Token
+                      </button>
+                    </div>
+
+                    {activeView === 'log-fault' ? (
+                      <form onSubmit={handleSubmitFault} className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Fault Source *
+                          </label>
+                          <select
+                            required
+                            value={newFault.source}
+                            onChange={(e) => setNewFault({...newFault, source: e.target.value})}
+                            className="w-full border border-gray-300 rounded-lg p-3"
+                          >
+                            <option value="">Select source</option>
+                            {FAULT_SOURCES.map(source => (
+                              <option key={source} value={source}>{source}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Location *
+                          </label>
+                          <select
+                            required
+                            value={newFault.location}
+                            onChange={(e) => setNewFault({...newFault, location: e.target.value})}
+                            className="w-full border border-gray-300 rounded-lg p-3"
+                          >
+                            <option value="">Select location</option>
+                            {LOCATIONS.map(location => (
+                              <option key={location} value={location}>{location}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Prepaid Meter Number *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={newFault.meterNumber}
+                            onChange={(e) => setNewFault({...newFault, meterNumber: e.target.value})}
+                            className="w-full border border-gray-300 rounded-lg p-3"
+                            placeholder="Enter meter number"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Time Fault Reported *
+                          </label>
+                          <input
+                            type="datetime-local"
+                            required
+                            value={newFault.reportedTime}
+                            onChange={(e) => setNewFault({...newFault, reportedTime: e.target.value})}
+                            className="w-full border border-gray-300 rounded-lg p-3"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Time Departed (Optional)
+                          </label>
+                          <input
+                            type="datetime-local"
+                            value={newFault.departedTime}
+                            onChange={(e) => setNewFault({...newFault, departedTime: e.target.value})}
+                            className="w-full border border-gray-300 rounded-lg p-3"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Time Arrived at Site (Optional)
+                          </label>
+                          <input
+                            type="datetime-local"
+                            value={newFault.arrivedTime}
+                            onChange={(e) => setNewFault({...newFault, arrivedTime: e.target.value})}
+                            className="w-full border border-gray-300 rounded-lg p-3"
+                          />
+                        </div>
+
+                        {newFault.arrivedTime && (
+                          <>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Fault Type
+                              </label>
+                              <select
+                                value={newFault.faultType}
+                                onChange={(e) => setNewFault({...newFault, faultType: e.target.value})}
+                                className="w-full border border-gray-300 rounded-lg p-3"
+                              >
+                                <option value="">Select fault type</option>
+                                {FAULT_TYPES.map(type => (
+                                  <option key={type} value={type}>{type}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Time Resolved (Optional)
+                              </label>
+                              <input
+                                type="datetime-local"
+                                value={newFault.resolvedTime}
+                                onChange={(e) => setNewFault({...newFault, resolvedTime: e.target.value})}
+                                className="w-full border border-gray-300 rounded-lg p-3"
+                              />
+                            </div>
+
+                            {newFault.resolvedTime && (
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  Customer Has Lights?
+                                </label>
+                                <div className="flex gap-4">
+                                  <button
+                                    type="button"
+                                    onClick={() => setNewFault({...newFault, lightsRestored: true})}
+                                    className={`flex-1 py-3 rounded-lg transition ${
+                                      newFault.lightsRestored === true
+                                        ? 'bg-green-600 text-white'
+                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    }`}
+                                  >
+                                    Yes
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setNewFault({...newFault, lightsRestored: false})}
+                                    className={`flex-1 py-3 rounded-lg transition ${
+                                      newFault.lightsRestored === false
+                                        ? 'bg-red-600 text-white'
+                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    }`}
+                                  >
+                                    No
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        )}
+
+                        <button
+                          type="submit"
+                          className="w-full bg-blue-600 text-white py-4 rounded-lg hover:bg-blue-700 transition font-semibold"
+                        >
+                          Submit Fault Report
+                        </button>
+                      </form>
+                    ) : (
+                      <form onSubmit={handleSubmitToken} className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Prepaid Meter Number *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={newToken.meterNumber}
+                            onChange={(e) => setNewToken({...newToken, meterNumber: e.target.value})}
+                            className="w-full border border-gray-300 rounded-lg p-3"
+                            placeholder="Enter meter number"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Location *
+                          </label>
+                          <select
+                            required
+                            value={newToken.location}
+                            onChange={(e) => setNewToken({...newToken, location: e.target.value})}
+                            className="w-full border border-gray-300 rounded-lg p-3"
+                          >
+                            <option value="">Select location</option>
+                            {LOCATIONS.map(location => (
+                              <option key={location} value={location}>{location}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Reason for Token Generation
+                          </label>
+                          <input
+                            type="text"
+                            value={newToken.reason}
+                            onChange={(e) => setNewToken({...newToken, reason: e.target.value})}
+                            className="w-full border border-gray-300 rounded-lg p-3"
+                            placeholder="e.g., Fault-related, Customer request"
+                          />
+                        </div>
+
+                        <button
+                          type="submit"
+                          className="w-full bg-green-600 text-white py-4 rounded-lg hover:bg-green-700 transition font-semibold"
+                        >
+                          Log Token Generation
+                        </button>
+                      </form>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          const stats = generateStats();
+
+          return (
+            <div className="min-h-screen bg-gray-50 p-4">
+              <div className="max-w-7xl mx-auto">
+                <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+                  <div className="flex justify-between items-center mb-6">
+                    <div>
+                      <h1 className="text-3xl font-bold text-gray-800">District Officer Dashboard</h1>
+                      <p className="text-gray-600">ECG Saltpond Fault Tracking</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setShowConfig(true)}
+                        className="text-gray-400 hover:text-gray-600"
+                        title="Reconfigure Supabase"
+                      >
+                        <Settings />
+                      </button>
+                      <button
+                        onClick={() => setUserRole('')}
+                        className="text-sm text-blue-600 hover:underline"
+                      >
+                        Switch View
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                    <div className="bg-blue-50 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-gray-600">Total Faults</p>
+                          <p className="text-3xl font-bold text-blue-600">{stats.total}</p>
+                        </div>
+                        <AlertCircle />
+                      </div>
+                    </div>
+
+                    <div className="bg-green-50 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-gray-600">Resolved</p>
+                          <p className="text-3xl font-bold text-green-600">{stats.resolved}</p>
+                        </div>
+                        <CheckCircle />
+                      </div>
+                    </div>
+
+                    <div className="bg-yellow-50 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-gray-600">Avg Response</p>
+                          <p className="text-3xl font-bold text-yellow-600">{stats.avgResponseTime}m</p>
+                        </div>
+                        <Clock />
+                      </div>
+                    </div>
+
+                    <div className="bg-purple-50 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-gray-600">Lights Restored</p>
+                          <p className="text-3xl font-bold text-purple-600">{stats.lightsRestoredRate}%</p>
+                        </div>
+                        <Zap />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-50 rounded-lg p-6 mb-6">
+                    <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                      <Phone />
+                      Fault Source Performance
+                    </h2>
+                    <div className="space-y-3">
+                      {Object.entries(stats.channelStats).map(([source, count]) => (
+                        <div key={source}>
+                          <div className="flex justify-between mb-1">
+                            <span className="text-gray-700">{source}</span>
+                            <span className="font-semibold">{count} faults</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div
+                              className="bg-blue-600 h-2 rounded-full"
+                              style={{ width: `${stats.total > 0 ? (count / stats.total) * 100 : 0}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-50 rounded-lg p-6 mb-6">
+                    <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                      <MapPin />
+                      Location Hotspots
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {Object.entries(stats.locationStats)
+                        .sort((a, b) => b[1] - a[1])
+                        .slice(0, 6)
+                        .map(([location, count]) => (
+                          <div key={location} className="bg-white rounded-lg p-3 flex justify-between items-center">
+                            <span className="text-gray-700">{location}</span>
+                            <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full font-semibold">
+                              {count}
+                            </span>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-50 rounded-lg p-6 mb-6">
+                    <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                      <Users />
+                      Team Performance
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {Object.entries(stats.teamStats).map(([member, data]) => (
+                        <div key={member} className="bg-white rounded-lg p-4">
+                          <h3 className="font-bold text-lg mb-3">{member}</h3>
+                          <div className="space-y-2">
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Total Faults</span>
+                              <span className="font-semibold">{data.total}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Resolved</span>
+                              <span className="font-semibold text-green-600">{data.resolved}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Lights Restored</span>
+                              <span className="font-semibold text-blue-600">{data.lightsRestored}</span>
+                            </div>
+                            <div className="mt-3 pt-3 border-t">
+                              <div className="text-center">
+                                <p className="text-sm text-gray-600">Success Rate</p>
+                                <p className="text-2xl font-bold text-purple-600">
+                                  {data.resolved > 0 ? Math.round((data.lightsRestored / data.resolved) * 100) : 0}%
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        };
+
+        ReactDOM.render(<FaultTracker />, document.getElementById('root'));
+    </script>
+</body>
+</html>
