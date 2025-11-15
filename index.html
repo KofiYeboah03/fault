@@ -478,71 +478,6 @@
                         Access System
                       </button>
 
-                      <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-                        <p className="text-sm text-blue-800 font-semibold mb-2">Access Codes:</p>
-                        <ul className="text-xs text-blue-700 space-y-1">
-                          <li>• District Officer: <code className="bg-blue-200 px-2 py-1 rounded">DO2024</code></li>
-                          <li>• Ofori: <code className="bg-blue-200 px-2 py-1 rounded">OFORI2024</code></li>
-                          <li>• Daniel: <code className="bg-blue-200 px-2 py-1 rounded">DANIEL2024</code></li>
-                          <li>• David: <code className="bg-blue-200 px-2 py-1 rounded">DAVID2024</code></li>
-                        </ul>
-                      </div>
-                    </div>
-                  </div>
-
-                  {!userRole && (
-                    <>
-                      <div className="bg-gray-50 rounded-lg p-6 mb-6 mt-6">
-                        <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                          <TrendingUp />
-                          Token Generation Activity
-                        </h2>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <div className="bg-white rounded-lg p-4">
-                            <p className="text-gray-600 mb-2">Total Tokens</p>
-                            <p className="text-3xl font-bold text-blue-600">
-                              {tokens.length}
-                            </p>
-                          </div>
-                          <div className="bg-white rounded-lg p-4">
-                            <p className="text-gray-600 mb-2">Total Faults</p>
-                            <p className="text-3xl font-bold text-green-600">
-                              {faults.length}
-                            </p>
-                          </div>
-                          <div className="bg-white rounded-lg p-4">
-                            <p className="text-gray-600 mb-2">Resolved</p>
-                            <p className="text-3xl font-bold text-purple-600">
-                              {faults.filter(f => f.status === 'resolved').length}
-                            </p>
-                          </div>
-                        </div>
-
-                        {tokens.length > 0 && (
-                          <div className="mt-4">
-                            <h3 className="font-semibold text-gray-800 mb-3">Meters Requiring Frequent Tokens</h3>
-                            <div className="bg-white rounded-lg p-4">
-                              {Object.entries(
-                                tokens.reduce((acc, token) => {
-                                  acc[token.meter_number] = (acc[token.meter_number] || 0) + 1;
-                                  return acc;
-                                }, {})
-                              )
-                                .sort((a, b) => b[1] - a[1])
-                                .slice(0, 5)
-                                .map(([meter, count]) => (
-                                  <div key={meter} className="flex justify-between py-2 border-b last:border-b-0">
-                                    <span className="text-gray-700 font-mono">{meter}</span>
-                                    <span className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-sm font-semibold">
-                                      {count} tokens
-                                    </span>
-                                  </div>
-                                ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
                       <div className="bg-gray-50 rounded-lg p-6">
                         <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                           <Calendar />
@@ -574,7 +509,7 @@
                                 </div>
                                 <div className="grid grid-cols-2 gap-2 text-sm text-gray-600 mb-2">
                                   <div>
-                                    <span className="font-semibold">Team:</span> {fault.team_member}
+                                    <span className="font-semibold">Team Member:</span> {fault.team_member}
                                   </div>
                                   <div>
                                     <span className="font-semibold">Source:</span> {fault.source}
