@@ -46,6 +46,14 @@
 
         const TEAM_MEMBERS = ['Ofori', 'Daniel', 'David'];
         const FAULT_SOURCES = ['Front Desk', 'WhatsApp Group', 'Call Line'];
+        
+        // Authentication codes
+        const AUTH_CODES = {
+          'DTO1122': 'officer',  // District Officer code
+          'OFORI4422': 'Ofori',
+          'DANIEL9898': 'Daniel',
+          'DAVID4545': 'David'
+        };
 
         const FaultTracker = () => {
           const [supabase, setSupabase] = useState(null);
@@ -60,6 +68,8 @@
           const [tokens, setTokens] = useState([]);
           const [activeView, setActiveView] = useState('dashboard');
           const [loading, setLoading] = useState(false);
+          const [authCode, setAuthCode] = useState('');
+          const [authError, setAuthError] = useState('');
 
           const [newFault, setNewFault] = useState({
             source: '',
@@ -116,6 +126,24 @@
             localStorage.setItem('supabase_key', supabaseKey);
             initializeSupabase(supabaseUrl, supabaseKey);
             loadData();
+          };
+
+          const handleAuthCodeSubmit = () => {
+            const upperCode = authCode.toUpperCase();
+            if (AUTH_CODES[upperCode]) {
+              const role = AUTH_CODES[upperCode];
+              if (role === 'officer') {
+                setUserRole('officer');
+                setTeamMember('');
+              } else {
+                setUserRole('field');
+                setTeamMember(role);
+              }
+              setAuthCode('');
+              setAuthError('');
+            } else {
+              setAuthError('Invalid access code. Please try again.');
+            }
           };
 
           const handleResetConfig = () => {
@@ -278,14 +306,16 @@
             if (!fault.reported_time || !fault.arrived_time) return null;
             const reported = new Date(fault.reported_time);
             const arrived = new Date(fault.arrived_time);
-            return Math.round((arrived - reported) / (1000 * 60));
+            const minutes = Math.round((arrived - reported) / (1000 * 60));
+            return minutes >= 0 ? minutes : 0; // Prevent negative values
           };
 
           const getResolutionTime = (fault) => {
             if (!fault.arrived_time || !fault.resolved_time) return null;
             const arrived = new Date(fault.arrived_time);
             const resolved = new Date(fault.resolved_time);
-            return Math.round((resolved - arrived) / (1000 * 60));
+            const minutes = Math.round((resolved - arrived) / (1000 * 60));
+            return minutes >= 0 ? minutes : 0; // Prevent negative values
           };
 
           const generateStats = () => {
@@ -423,43 +453,41 @@
                       </button>
                     </div>
                     
-                    {!userRole ? (
-                      <div className="space-y-4">
-                        <button
-                          onClick={() => setUserRole('officer')}
-                          className="w-full bg-blue-600 text-white py-4 rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2"
-                        >
-                          <Building />
-                          District Officer Dashboard
-                        </button>
-                        <button
-                          onClick={() => setUserRole('field')}
-                          className="w-full bg-green-600 text-white py-4 rounded-lg hover:bg-green-700 transition flex items-center justify-center gap-2"
-                        >
-                          <Users />
-                          Field Team Entry
-                        </button>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Enter Access Code
+                        </label>
+                        <input
+                          type="password"
+                          value={authCode}
+                          onChange={(e) => setAuthCode(e.target.value)}
+                          onKeyPress={(e) => e.key === 'Enter' && handleAuthCodeSubmit()}
+                          placeholder="Enter your access code"
+                          className="w-full border border-gray-300 rounded-lg p-3"
+                        />
+                        {authError && (
+                          <p className="text-red-600 text-sm mt-2">{authError}</p>
+                        )}
                       </div>
-                    ) : (
-                      <div className="space-y-4">
-                        <button
-                          onClick={() => setUserRole('')}
-                          className="text-sm text-blue-600 hover:underline mb-4"
-                        >
-                          ← Back
-                        </button>
-                        <h2 className="text-lg font-semibold mb-4">Select Team Member</h2>
-                        {TEAM_MEMBERS.map(member => (
-                          <button
-                            key={member}
-                            onClick={() => setTeamMember(member)}
-                            className="w-full bg-gray-100 hover:bg-gray-200 py-3 rounded-lg transition"
-                          >
-                            {member}
-                          </button>
-                        ))}
+                      
+                      <button
+                        onClick={handleAuthCodeSubmit}
+                        className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition font-semibold"
+                      >
+                        Access System
+                      </button>
+
+                      <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+                        <p className="text-sm text-blue-800 font-semibold mb-2">Access Codes:</p>
+                        <ul className="text-xs text-blue-700 space-y-1">
+                          <li>• District Officer: <code className="bg-blue-200 px-2 py-1 rounded">DO2024</code></li>
+                          <li>• Ofori: <code className="bg-blue-200 px-2 py-1 rounded">OFORI2024</code></li>
+                          <li>• Daniel: <code className="bg-blue-200 px-2 py-1 rounded">DANIEL2024</code></li>
+                          <li>• David: <code className="bg-blue-200 px-2 py-1 rounded">DAVID2024</code></li>
+                        </ul>
                       </div>
-                    )}
+                    </div>
                   </div>
 
                   {!userRole && (
@@ -842,7 +870,7 @@
                 <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
                   <div className="flex justify-between items-center mb-6">
                     <div>
-                      <h1 className="text-3xl font-bold text-gray-800">District Officer Dashboard</h1>
+                      <h1 className="text-3xl font-bold text-gray-800">District Technical Officer Dashboard</h1>
                       <p className="text-gray-600">ECG Saltpond Fault Tracking</p>
                     </div>
                     <div className="flex gap-2">
@@ -906,6 +934,112 @@
 
                   <div className="bg-gray-50 rounded-lg p-6 mb-6">
                     <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                      <TrendingUp />
+                      Performance Leaderboard
+                    </h2>
+                    <div className="bg-white rounded-lg overflow-hidden">
+                      <table className="w-full">
+                        <thead className="bg-gray-100">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Rank</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Team Member</th>
+                            <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Success Rate</th>
+                            <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Total Resolved</th>
+                            <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Lights Restored</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {Object.entries(stats.teamStats)
+                            .map(([member, data]) => ({
+                              member,
+                              ...data,
+                              successRate: data.resolved > 0 ? (data.lightsRestored / data.resolved) * 100 : 0
+                            }))
+                            .sort((a, b) => b.successRate - a.successRate)
+                            .map((member, index) => (
+                              <tr key={member.member} className="border-b hover:bg-gray-50">
+                                <td className="px-4 py-3">
+                                  <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold ${
+                                    index === 0 ? 'bg-yellow-100 text-yellow-700' :
+                                    index === 1 ? 'bg-gray-100 text-gray-700' :
+                                    index === 2 ? 'bg-orange-100 text-orange-700' :
+                                    'bg-blue-50 text-blue-600'
+                                  }`}>
+                                    {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 font-semibold text-gray-800">{member.member}</td>
+                                <td className="px-4 py-3 text-center">
+                                  <span className={`inline-block px-3 py-1 rounded-full font-bold ${
+                                    member.successRate >= 80 ? 'bg-green-100 text-green-700' :
+                                    member.successRate >= 50 ? 'bg-yellow-100 text-yellow-700' :
+                                    'bg-red-100 text-red-700'
+                                  }`}>
+                                    {Math.round(member.successRate)}%
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-center font-semibold text-gray-700">{member.resolved}</td>
+                                <td className="px-4 py-3 text-center font-semibold text-gray-700">{member.lightsRestored}</td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-50 rounded-lg p-6 mb-6">
+                    <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                      <TrendingUp />
+                      Token Generation Activity
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                      <div className="bg-white rounded-lg p-4">
+                        <p className="text-gray-600 mb-2">Total Tokens</p>
+                        <p className="text-3xl font-bold text-blue-600">
+                          {tokens.length}
+                        </p>
+                      </div>
+                      <div className="bg-white rounded-lg p-4">
+                        <p className="text-gray-600 mb-2">Total Faults</p>
+                        <p className="text-3xl font-bold text-green-600">
+                          {faults.length}
+                        </p>
+                      </div>
+                      <div className="bg-white rounded-lg p-4">
+                        <p className="text-gray-600 mb-2">Resolved</p>
+                        <p className="text-3xl font-bold text-purple-600">
+                          {faults.filter(f => f.status === 'resolved').length}
+                        </p>
+                      </div>
+                    </div>
+
+                    {tokens.length > 0 && (
+                      <div>
+                        <h3 className="font-semibold text-gray-800 mb-3">Meters Requiring Frequent Tokens</h3>
+                        <div className="bg-white rounded-lg p-4">
+                          {Object.entries(
+                            tokens.reduce((acc, token) => {
+                              acc[token.meter_number] = (acc[token.meter_number] || 0) + 1;
+                              return acc;
+                            }, {})
+                          )
+                            .sort((a, b) => b[1] - a[1])
+                            .slice(0, 5)
+                            .map(([meter, count]) => (
+                              <div key={meter} className="flex justify-between py-2 border-b last:border-b-0">
+                                <span className="text-gray-700 font-mono">{meter}</span>
+                                <span className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-sm font-semibold">
+                                  {count} tokens
+                                </span>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="bg-gray-50 rounded-lg p-6 mb-6">
+                    <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                       <Phone />
                       Fault Source Performance
                     </h2>
@@ -950,7 +1084,109 @@
                   <div className="bg-gray-50 rounded-lg p-6 mb-6">
                     <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                       <Users />
-                      Team Performance
+                      Individual Team Member Performance
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {Object.entries(stats.teamStats).map(([member, data]) => {
+                        const memberTokens = tokens.filter(t => t.team_member === member);
+                        const avgResponseTimes = faults
+                          .filter(f => f.team_member === member)
+                          .map(getResponseTime)
+                          .filter(t => t !== null);
+                        const avgResponse = avgResponseTimes.length > 0
+                          ? Math.round(avgResponseTimes.reduce((a, b) => a + b, 0) / avgResponseTimes.length)
+                          : 0;
+                        
+                        return (
+                          <div key={member} className="bg-white rounded-lg p-5 shadow-sm border border-gray-200">
+                            <div className="flex items-center justify-between mb-4">
+                              <h3 className="font-bold text-xl text-gray-800">{member}</h3>
+                              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                                data.resolved > 0 && (data.lightsRestored / data.resolved) >= 0.8
+                                  ? 'bg-green-100'
+                                  : data.resolved > 0 && (data.lightsRestored / data.resolved) >= 0.5
+                                  ? 'bg-yellow-100'
+                                  : 'bg-red-100'
+                              }`}>
+                                <span className="text-2xl">
+                                  {data.resolved > 0 && (data.lightsRestored / data.resolved) >= 0.8 ? '🌟' : 
+                                   data.resolved > 0 && (data.lightsRestored / data.resolved) >= 0.5 ? '⚡' : '🔧'}
+                                </span>
+                              </div>
+                            </div>
+                            
+                            <div className="space-y-3">
+                              <div className="flex justify-between items-center py-2 border-b">
+                                <span className="text-gray-600 text-sm">Total Faults</span>
+                                <span className="font-bold text-lg text-blue-600">{data.total}</span>
+                              </div>
+                              
+                              <div className="flex justify-between items-center py-2 border-b">
+                                <span className="text-gray-600 text-sm">Resolved</span>
+                                <span className="font-bold text-lg text-green-600">{data.resolved}</span>
+                              </div>
+                              
+                              <div className="flex justify-between items-center py-2 border-b">
+                                <span className="text-gray-600 text-sm">In Progress</span>
+                                <span className="font-bold text-lg text-yellow-600">
+                                  {data.total - data.resolved}
+                                </span>
+                              </div>
+                              
+                              <div className="flex justify-between items-center py-2 border-b">
+                                <span className="text-gray-600 text-sm">Lights Restored</span>
+                                <span className="font-bold text-lg text-purple-600">{data.lightsRestored}</span>
+                              </div>
+                              
+                              <div className="flex justify-between items-center py-2 border-b">
+                                <span className="text-gray-600 text-sm">Tokens Generated</span>
+                                <span className="font-bold text-lg text-orange-600">{memberTokens.length}</span>
+                              </div>
+                              
+                              <div className="flex justify-between items-center py-2 border-b">
+                                <span className="text-gray-600 text-sm">Avg Response Time</span>
+                                <span className="font-bold text-lg text-indigo-600">{avgResponse}m</span>
+                              </div>
+                              
+                              <div className="mt-4 pt-4 border-t-2">
+                                <div className="text-center">
+                                  <p className="text-xs text-gray-500 mb-1">SUCCESS RATE</p>
+                                  <p className={`text-3xl font-bold ${
+                                    data.resolved > 0 && (data.lightsRestored / data.resolved) >= 0.8
+                                      ? 'text-green-600'
+                                      : data.resolved > 0 && (data.lightsRestored / data.resolved) >= 0.5
+                                      ? 'text-yellow-600'
+                                      : 'text-red-600'
+                                  }`}>
+                                    {data.resolved > 0 ? Math.round((data.lightsRestored / data.resolved) * 100) : 0}%
+                                  </p>
+                                  <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+                                    <div
+                                      className={`h-2 rounded-full ${
+                                        data.resolved > 0 && (data.lightsRestored / data.resolved) >= 0.8
+                                          ? 'bg-green-600'
+                                          : data.resolved > 0 && (data.lightsRestored / data.resolved) >= 0.5
+                                          ? 'bg-yellow-600'
+                                          : 'bg-red-600'
+                                      }`}
+                                      style={{ 
+                                        width: `${data.resolved > 0 ? (data.lightsRestored / data.resolved) * 100 : 0}%` 
+                                      }}
+                                    ></div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-50 rounded-lg p-6 mb-6">
+                    <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                      <Users />
+                      Team Performance Summary
                     </h2>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       {Object.entries(stats.teamStats).map(([member, data]) => (
